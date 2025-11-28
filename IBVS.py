@@ -9,19 +9,20 @@ from scipy.spatial.transform import Rotation as Rot
 
 import imageio
 
-import utils
+import src.utils as utils
 
-#camera image dimensions
-camera_width = 512      #image width
-camera_height = 512     #image height
+# camera image dimensions
+camera_width = utils.camera_width      #image width
+camera_height = utils.camera_height     #image height
+camera_focal_depth = utils.camera_focal_depth # camera focal depth f
 
-#control objectives (if you wish, you can play with these values for fun)
+# control objectives 
 object_location_desired = np.array([camera_width/2,camera_height/2])  #center the object to middle of image
                                                                 
 K_p_x = 0.1           #Proportional control gain for translation
 K_p_Omega = 0.02      #Proportional control gain for rotation       
 
-MAX_ITER = 200
+MAX_ITER = 2000
 
 
 def getImageJacobian(u_px,v_px,depthImg,focal_length, imgWidth, imgHeight):
@@ -111,7 +112,7 @@ def findJointControl(robot, delta_X, delta_Omega):
 
 
 
-def image_visual_servo(robot):
+def image_visual_servo(env, robot):
 
     frames = []
     for ITER in range(MAX_ITER):
@@ -119,15 +120,15 @@ def image_visual_servo(robot):
         ''' Match Camera Pose to Robot End-Effector and Get Image'''
         
         cameraPosition, eeOrientation = robot.get_ee_position()
-        cameraOrientation = eeOrientation # @ Rz 
+        cameraOrientation = eeOrientation 
 
-        rgb, depth = utils.get_camera_img_float(cameraPosition, cameraOrientation)
+        rgb, depth, segment = utils.get_camera_img_float(cameraPosition, cameraOrientation)
         
         utils.draw_coordinate_frame(cameraPosition, cameraOrientation, 0.1)
 
         ''' Magical Computer Vision Algorithm that gets locations of objects in the image, as object_loc (Do Not Remove)'''
-        viewMat, projMat = utils.get_camera_view_and_projection_opencv(cameraPosition, cameraOrientation)
-        object_loc = utils.opengl_plot_world_to_pixelspace(object_center, viewMat, projMat,camera_width, camera_height)
+        
+        object_loc = utils.get_puck_center_from_camera(env.puck_id, segmentation_image=segment) 
 
         # Image Jacobian
         imageJacobian = getImageJacobian(object_loc[0], object_loc[1], depth, camera_focal_depth, camera_width, camera_height)
@@ -136,8 +137,8 @@ def image_visual_servo(robot):
         delta_X, delta_Omega = findCameraControl(object_location_desired, object_loc, imageJacobian)
         
         
-        delta_X = cameraOrientation @ delta_X # cameraOrientation@
-        delta_Omega = cameraOrientation @ delta_Omega # cameraOrientation@
+        delta_X = cameraOrientation @ delta_X 
+        delta_Omega = cameraOrientation @ delta_Omega 
         
         #set Next Joint Targets
         new_jointPositions = findJointControl(robot, delta_X, delta_Omega)
@@ -150,7 +151,10 @@ def image_visual_servo(robot):
 
         q_sing = -(robot.get_current_joint_angles() - q_home) # Null space control to operate near to home configuration for jerk free movement
         
-        joint_null = (np.eye(7) - J_rob_inv@J_rob)@(roll_null*q_roll+sing*q_sing)
+        J_rob = robot.get_jacobian_at_current_position()
+        J_rob_inv= utils.pseudo_inverse(J_rob)
+
+        joint_null = (np.eye(7) - J_rob_inv@J_rob)@(sing*q_sing)
 
         robot.set_joint_position(new_jointPositions + joint_null)
         
@@ -175,8 +179,8 @@ def image_visual_servo(robot):
 
 
 if __name__ == "__main__":
-    from env_robot import Env, Robot
+    from src.env_robot import Env, Robot
     env = Env()
     robot = Robot()
     
-    image_visual_servo(robot)
+    image_visual_servo(env, robot)

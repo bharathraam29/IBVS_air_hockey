@@ -212,7 +212,7 @@ p.loadURDF('plane.urdf')
 
 # adding robot into the environment
 ''' Create Robot Instance'''
-pandaUid = p.loadURDF(os.path.join(pybullet_data.getDataPath(), "franka_panda\\panda.urdf"),useFixedBase=True)
+pandaUid = p.loadURDF(os.path.join(pybullet_data.getDataPath(), "franka_panda/panda.urdf"),useFixedBase=True)
 p.resetBasePositionAndOrientation(pandaUid, [0, 0, 0], [0, 0, 0, 1])
 initialJointPosition = [0,-np.pi/4,np.pi/4,-np.pi/4,np.pi/4,np.pi/4,np.pi/4,0,0,0,0,0]
 robot = eye_in_hand_robot(pandaUid,initialJointPosition)

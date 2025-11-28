@@ -38,10 +38,10 @@ class Env:
  
         # CREATE WORLD OBJECTS
         self.create_long_table_with_edges()
-        puck = self.create_puck()
+        self.puck_id = self.create_puck()
 
         # Launch puck 
-        p.resetBaseVelocity(puck, linearVelocity=[3.0, 1.0, 0.0])
+        p.resetBaseVelocity(self.puck_id, linearVelocity=[3.0, 1.0, 0.0])
 
         # Optional engine tuning
         p.setPhysicsEngineParameter(contactSlop=0.0)
@@ -191,9 +191,9 @@ class Robot:
         for i in range(self._numLinkJoints):
             p.resetJointState(self.robot_id,i,initialJointPos[i])
 
-        while True:
-            p.stepSimulation()
-            time.sleep(1/240)
+        # while True:
+        #     p.stepSimulation()
+        #     time.sleep(1/240)
 
 
     def get_ee_position(self):

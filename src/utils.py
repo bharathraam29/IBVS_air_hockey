@@ -16,6 +16,9 @@ camera_width = 512                                             #image width
 camera_height = 512                                            #image height
 camera_fov = 120                                                #field of view of camera
 
+camera_focal_depth = 0.5*camera_height/np.tan(0.5*np.pi/180*camera_fov) #focal depth in pixel space
+                                                               
+
 camera_aspect = camera_width/camera_height                     #aspect ratio
 camera_near = 0.02                                             #near clipping plane in meters, do not set non-zero
 camera_far = 100                                               #far clipping plane in meters
@@ -119,7 +122,7 @@ def get_camera_img_float(cameraPos, camereaOrn):
                                                    cameraUpVector=-camereaOrn[:,1])
 
     __camera_projection_matrix_opengl = p.computeProjectionMatrixFOV(camera_fov, camera_aspect, camera_near, camera_far)        
-    width, height, rgbImg, nonlinDepthImg, _ = p.getCameraImage(camera_width, 
+    width, height, rgbImg, nonlinDepthImg, segmentation = p.getCameraImage(camera_width, 
                                                  camera_height, 
                                                  __camera_view_matrix_opengl,
                                                  __camera_projection_matrix_opengl, 
@@ -128,7 +131,7 @@ def get_camera_img_float(cameraPos, camereaOrn):
     # Convert to numpy arrays
     rgbImg = np.array(rgbImg, dtype=np.uint8).reshape(height, width, 4)
     nonlinDepthImg = np.array(nonlinDepthImg, dtype=np.float32).reshape(height, width)
-
+    segmentation = np.array(segmentation, dtype=np.float32).reshape(height, width)
     
     #adjust for clipping and nonlinear distance i.e., 1/d (0 is closest, i.e., near, 1 is furthest away, i.e., far
     depthImgLinearized =camera_far*camera_near/(camera_far+camera_near-(camera_far-camera_near)*nonlinDepthImg)
@@ -136,4 +139,31 @@ def get_camera_img_float(cameraPos, camereaOrn):
     #convert to numpy and a rgb-d image
     rgb_image = np.array(rgbImg[:,:,:3], dtype=np.uint8)
     depth_image = np.array(depthImgLinearized, dtype=np.float32)
-    return rgb_image, depth_image
+    segmentation_image = np.array(segmentation, dtype=np.float32)
+
+    return rgb_image, depth_image, segmentation_image
+
+
+def get_puck_center_from_camera(puck_id, segmentation_image):
+    """
+    Captures a camera image from PyBullet, extracts segmentation mask,
+    and returns center of puck in pixel coordinates.
+
+    Returns:
+        (u, v) pixel coordinates
+        None   if puck not visible
+    """
+
+    H, W = segmentation_image.shape
+
+    # Find all pixels belonging to the puck_id
+    ys, xs = np.where(segmentation_image == puck_id)
+
+    if len(xs) == 0:
+        return None   # puck not visible
+
+    # Average pixel location = center
+    u = int(np.mean(xs))   # horizontal (column) - pixel value
+    v = int(np.mean(ys))   # vertical   (row) - pixel value
+
+    return (u, v)
