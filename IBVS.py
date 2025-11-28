@@ -5,11 +5,11 @@ import pybullet_data
 import os
 import time
 import cv2
-from scipy.spatial.transform import Rotation as Rot            #can use this to apply angular rotations to coordinate frames
-
-
+from scipy.spatial.transform import Rotation as Rot            
 
 import imageio
+
+import utils
 
 #camera image dimensions
 camera_width = 512      #image width
@@ -99,7 +99,7 @@ def findJointControl(robot, delta_X, delta_Omega):
     
     J = robot.get_jacobian_at_current_position()
 
-    J_inv =pseudo_inverse(J)
+    J_inv = utils.pseudo_inverse(J)
 
     del_state = np.concatenate([delta_X, delta_Omega])
     del_Q = J_inv@del_state
@@ -111,7 +111,7 @@ def findJointControl(robot, delta_X, delta_Omega):
 
 
 
-def image_visual_servo():
+def image_visual_servo(robot):
 
     frames = []
     for ITER in range(MAX_ITER):
@@ -121,13 +121,13 @@ def image_visual_servo():
         cameraPosition, eeOrientation = robot.get_ee_position()
         cameraOrientation = eeOrientation # @ Rz 
 
-        rgb, depth = get_camera_img_float(cameraPosition, cameraOrientation)
+        rgb, depth = utils.get_camera_img_float(cameraPosition, cameraOrientation)
         
-        draw_coordinate_frame(cameraPosition, cameraOrientation, 0.1)
+        utils.draw_coordinate_frame(cameraPosition, cameraOrientation, 0.1)
 
         ''' Magical Computer Vision Algorithm that gets locations of objects in the image, as object_loc (Do Not Remove)'''
-        viewMat, projMat = get_camera_view_and_projection_opencv(cameraPosition, cameraOrientation)
-        object_loc = opengl_plot_world_to_pixelspace(object_center, viewMat, projMat,camera_width, camera_height)
+        viewMat, projMat = utils.get_camera_view_and_projection_opencv(cameraPosition, cameraOrientation)
+        object_loc = utils.opengl_plot_world_to_pixelspace(object_center, viewMat, projMat,camera_width, camera_height)
 
         # Image Jacobian
         imageJacobian = getImageJacobian(object_loc[0], object_loc[1], depth, camera_focal_depth, camera_width, camera_height)
@@ -164,7 +164,7 @@ def image_visual_servo():
         frames.append(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
         cv2.waitKey(1)
 
-    imageio.mimsave('robot_servoing_stationary_null.gif', frames, fps=20)
+    imageio.mimsave('robot_servoing_PD.gif', frames, fps=20)
     print("Gif saved")
 
     #close the physics server
@@ -175,4 +175,8 @@ def image_visual_servo():
 
 
 if __name__ == "__main__":
-    image_visual_servo()
+    from env_robot import Env, Robot
+    env = Env()
+    robot = Robot()
+    
+    image_visual_servo(robot)
