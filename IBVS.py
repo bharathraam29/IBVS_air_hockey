@@ -1,4 +1,4 @@
-#import matplotlib.pyplot as plt
+
 import numpy as np
 import pybullet as p
 import pybullet_data
@@ -126,7 +126,7 @@ def image_visual_servo(env, robot):
         
         utils.draw_coordinate_frame(cameraPosition, cameraOrientation, 0.1)
 
-        ''' Magical Computer Vision Algorithm that gets locations of objects in the image, as object_loc (Do Not Remove)'''
+        # Get object location from segmentation image
         
         object_loc = utils.get_puck_center_from_camera(env.puck_id, segmentation_image=segment) 
 
