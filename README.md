@@ -9,7 +9,6 @@ This repository contains the implementation of IBVS control for an air hockey pl
 ## Files
 
 - `env_creation.py`: Environment setup and configuration
-- `Assignment 3 Visual Servoing Problem Set.ipynb`: Jupyter notebook with problem set solutions
 
 ## Setup
 
