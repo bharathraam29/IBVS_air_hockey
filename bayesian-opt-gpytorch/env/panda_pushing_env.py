@@ -676,19 +676,21 @@ class PandaHoverEnv(PandaPushingEnv):
                         render_every_n_steps=render_every_n_steps, 
                         camera_heigh=camera_heigh, camera_width=camera_width)
         
-        # Target hover position [x, y, z]
-        self.target_state = np.array([0.5, 0.0, 0.02])  # Default hover position
-        
-        # Space limits for end-effector
-        self.space_limits = [np.array([0.2, -0.4, 0.05]), np.array([0.8, 0.4, 0.4])]
-        
+        self.space_limits = [
+            np.array([0.2, -0.3, 0.05]),   # [x_min, y_min, z_min]
+            np.array([0.8,  0.3, 0.4])     # [x_max, y_max, z_max]
+        ]
+
+        # Target hover position (will be overwritten each step)
+        self.target_state = np.array([0.5, 0.0, 0.10], dtype=np.float32)
+
         # Observation space: end-effector position [x, y, z]
         self.observation_space = spaces.Box(
             low=self.space_limits[0],
             high=self.space_limits[1],
             dtype=np.float32
         )
-        
+
         # Action space: end-effector displacement [dx, dy, dz] in meters
         max_displacement = 0.05  # Maximum displacement per step
         self.action_space = spaces.Box(
@@ -696,37 +698,245 @@ class PandaHoverEnv(PandaPushingEnv):
             high=np.array([max_displacement, max_displacement, max_displacement]),
             dtype=np.float32
         )
-        
+
         # Motion parameters
         self.delta_step_joint = 0.016
+
+        # Small table centered at x=0.5, y=0.0, in front of robot
+        self.table_length = 0.6       # along x
+        self.table_width  = 0.4       # along y
+        self.table_thickness = 0.05
+        self.wall_height = 0.1
+        self.wall_thickness = 0.02
+
+        # Table transform
+        self.table_position = (0.5, 0.0, 0.0)  # center of table top
+        self.table_orientation = (0, 0, 0, 1)  # no rotation
+
+        # Puck parameters
+        self.puck_radius = 0.06
+        self.puck_height = 0.02
+        self.puck_mass = 0.17
+
+        # Start puck near the right side of the table, slightly above top
+        self.puck_base_pos = [
+            self.table_position[0] + self.table_length / 4.0,  # a bit to +x side
+            self.table_position[1],                            # center in y
+            self.puck_height / 2.0 + 0.02                      # just above table
+        ]
+
+        # (Optional) goalie-line parameters (not strictly needed for your main.py)
+        self.x_goal_line = self.table_position[0] - self.table_length / 2.0 + 0.02
+        self.goal_y_min = self.table_position[1] - self.table_width / 2.0
+        self.goal_y_max = self.table_position[1] + self.table_width / 2.0
+        self.block_radius = 0.05
+
+    # def reset(self):
+    #     self.episode_counter += 1
+    #     self.episode_step_counter = 0
+    #     self.is_render_on = True
+    #     p.resetSimulation()
+    #     p.setGravity(0, 0, -9.8)
+
+    #     p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
+
+    #     # Add panda to the scene
+    #     self.pandaUid = p.loadURDF(os.path.join(assets_dir, "franka_panda/panda.urdf"), useFixedBase=True)
+    #     for i in range(len(self.init_panda_joint_state)):
+    #         p.resetJointState(self.pandaUid, i, self.init_panda_joint_state[i])
+
+    #     # Load table (optional, for reference)
+    #     # self.tableUid = p.loadURDF(os.path.join(assets_dir, "objects/table/table.urdf"), 
+    #     #                            basePosition=[0.5, 0, -0.65])
+        
+    #     p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
+        
+    #     # Step simulation a few times to let physics settle
+    #     for _ in range(10):
+    #         p.stepSimulation()
+
+    #     # Get initial state (end-effector position)
+    #     state = self.get_state()
+    #     return state
+
+    def _create_air_hockey_table_with_edges(self):
+        px, py, pz = self.table_position
+        q = self.table_orientation
+
+        L = self.table_length
+        W = self.table_width
+        T = self.table_thickness
+        H = self.wall_height
+        WT = self.wall_thickness
+
+        # Table
+        table_col = p.createCollisionShape(
+            p.GEOM_BOX,
+            halfExtents=[L / 2, W / 2, T / 2]
+        )
+        table_vis = p.createVisualShape(
+            p.GEOM_BOX,
+            halfExtents=[L / 2, W / 2, T / 2],
+            rgbaColor=[0.85, 0.85, 0.85, 1]
+        )
+
+        self.table_id = p.createMultiBody(
+            baseCollisionShapeIndex=table_col,
+            baseVisualShapeIndex=table_vis,
+            basePosition=[px, py, pz - T / 2],
+            baseOrientation=q
+        )
+
+        p.changeDynamics(
+            self.table_id, -1,
+            lateralFriction=0.0,
+            rollingFriction=0.0,
+            spinningFriction=0.0,
+            linearDamping=0.0,
+            angularDamping=0.0
+        )
+
+        # Walls along x (left/right ends)
+        end_col = p.createCollisionShape(
+            p.GEOM_BOX,
+            halfExtents=[WT / 2, W / 2, H / 2]
+        )
+        end_vis = p.createVisualShape(
+            p.GEOM_BOX,
+            halfExtents=[WT / 2, W / 2, H / 2],
+            rgbaColor=[0.1, 0.1, 0.1, 1]
+        )
+
+        for x_sign in [-1, 1]:
+            wx = px + x_sign * (L / 2)
+            wy = py
+            wz = pz + H / 2
+            wall_id = p.createMultiBody(
+                baseCollisionShapeIndex=end_col,
+                baseVisualShapeIndex=end_vis,
+                basePosition=[wx, wy, wz],
+                baseOrientation=q
+            )
+            p.changeDynamics(
+                wall_id, -1,
+                lateralFriction=0.0,
+                rollingFriction=0.0,
+                spinningFriction=0.0,
+                linearDamping=0.0,
+                angularDamping=0.0,
+                restitution=0.9
+            )
+
+        # Walls along y (sides)
+        side_col = p.createCollisionShape(
+            p.GEOM_BOX,
+            halfExtents=[L / 2, WT / 2, H / 2]
+        )
+        side_vis = p.createVisualShape(
+            p.GEOM_BOX,
+            halfExtents=[L / 2, WT / 2, H / 2],
+            rgbaColor=[0.1, 0.1, 0.1, 1]
+        )
+
+        for y_sign in [-1, 1]:
+            wx = px
+            wy = py + y_sign * (W / 2)
+            wz = pz + H / 2
+            wall_id = p.createMultiBody(
+                baseCollisionShapeIndex=side_col,
+                baseVisualShapeIndex=side_vis,
+                basePosition=[wx, wy, wz],
+                baseOrientation=q
+            )
+            p.changeDynamics(
+                wall_id, -1,
+                lateralFriction=0.0,
+                rollingFriction=0.0,
+                spinningFriction=0.0,
+                linearDamping=0.0,
+                angularDamping=0.0,
+                restitution=0.9
+            )
+
+    def _create_puck(self):
+        puck_col = p.createCollisionShape(
+            p.GEOM_CYLINDER,
+            radius=self.puck_radius,
+            height=self.puck_height
+        )
+        puck_vis = p.createVisualShape(
+            p.GEOM_CYLINDER,
+            radius=self.puck_radius,
+            length=self.puck_height,
+            rgbaColor=[1, 0, 0, 1]
+        )
+
+        self.puck_id = p.createMultiBody(
+            baseMass=self.puck_mass,
+            baseCollisionShapeIndex=puck_col,
+            baseVisualShapeIndex=puck_vis,
+            basePosition=self.puck_base_pos
+        )
+
+        # Make it slide reasonably and bounce a bit
+        p.changeDynamics(
+            self.puck_id, -1,
+            lateralFriction=0.0,
+            spinningFriction=0.0,
+            rollingFriction=0.0,
+            restitution=0.95,
+            linearDamping=0.0,
+            angularDamping=0.0
+        )
+
+        # Launch puck with a modest speed towards -x
+        initial_speed = 0.15
+        vx = -initial_speed
+        vy = 0.02
+        p.resetBaseVelocity(self.puck_id, linearVelocity=[vx, vy, 0.0])
 
     def reset(self):
         self.episode_counter += 1
         self.episode_step_counter = 0
         self.is_render_on = True
+
         p.resetSimulation()
+        if not hasattr(self, "video_id"):
+            self.video_id = p.startStateLogging(
+                p.STATE_LOGGING_VIDEO_MP4,
+                "air_hockey_simulation.mp4"
+            )
         p.setGravity(0, 0, -9.8)
 
         p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 
-        # Add panda to the scene
-        self.pandaUid = p.loadURDF(os.path.join(assets_dir, "franka_panda/panda.urdf"), useFixedBase=True)
+        # 1) Create the air-hockey table + walls
+        self._create_air_hockey_table_with_edges()
+
+        # 2) Create the puck and launch it
+        self._create_puck()
+
+        # 3) Add panda to the scene (reuse base behavior from PandaPushingEnv)
+        self.pandaUid = p.loadURDF(
+            os.path.join(assets_dir, "franka_panda/panda.urdf"),
+            useFixedBase=True
+        )
         for i in range(len(self.init_panda_joint_state)):
             p.resetJointState(self.pandaUid, i, self.init_panda_joint_state[i])
 
-        # Load table (optional, for reference)
-        # self.tableUid = p.loadURDF(os.path.join(assets_dir, "objects/table/table.urdf"), 
-        #                            basePosition=[0.5, 0, -0.65])
-        
         p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
-        
-        # Step simulation a few times to let physics settle
+
+        # Let physics settle a bit
         for _ in range(10):
             p.stepSimulation()
 
-        # Get initial state (end-effector position)
+        # Initial EE state
         state = self.get_state()
         return state
+
+    def get_puck_position(self):
+        pos, orn = p.getBasePositionAndOrientation(self.puck_id)
+        return np.array(pos, dtype=np.float32)
 
     def step(self, action):
         # Check that the action is valid
@@ -786,3 +996,15 @@ class PandaHoverEnv(PandaPushingEnv):
         assert isinstance(target_state, np.ndarray)
         assert target_state.shape == (3,), "Target state must be [x, y, z]"
         self.target_state = target_state
+
+    def get_puck_velocity(self):
+        """Return puck linear velocity [vx, vy, vz]."""
+        vel_lin, vel_ang = p.getBaseVelocity(self.puck_id)
+        return np.array(vel_lin, dtype=np.float32)
+
+    def set_puck_velocity(self, vel):
+        """Set puck linear velocity to vel (3D)."""
+        vel = np.asarray(vel, dtype=np.float32)
+        p.resetBaseVelocity(self.puck_id,
+                            linearVelocity=vel.tolist(),
+                            angularVelocity=[0.0, 0.0, 0.0])

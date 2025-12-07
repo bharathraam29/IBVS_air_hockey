@@ -148,6 +148,4 @@ if __name__ == "__main__":
     
     target_pos_1 = np.array([0.5, 0.0, 0.02])  # [x, y, z] in meters
     hover_at_position(target_pos_1, num_steps=50, render=RENDER, device=DEVICE)
-    
-
 
