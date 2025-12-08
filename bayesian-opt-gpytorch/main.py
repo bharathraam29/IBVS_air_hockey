@@ -14,7 +14,7 @@ def main():
     # 1. Create environment
     env = PandaHoverEnv(
         debug=render,
-        render_non_push_motions=True,
+        render_non_push_motions=False,
         render_every_n_steps=1,
         camera_heigh=800,
         camera_width=800
@@ -28,7 +28,7 @@ def main():
         env=env,
         model=dynamics_model,
         cost_function=hover_cost_function,
-        num_samples=500,  # MPPI samples
+        num_samples=20,  # MPPI samples
         horizon=10,       # planning horizon
         device=device
     )
@@ -84,26 +84,11 @@ def main():
             )
 
         # --- Block detection + bounce ---
-        if dist_xy < block_radius and (step - last_block_step) >= block_cooldown_steps:
+        if dist_xy < block_radius:
             num_blocks += 1
             last_block_step = step
             print(f"✓ Block #{num_blocks} at step {step} (XY distance {dist_xy:.3f} m)")
-
-            # Get current puck velocity
-            v = env.get_puck_velocity()
-            vx, vy, vz = v
-
-            # If velocity is almost zero (puck "dead"), give it a default direction
-            speed_xy = np.linalg.norm(v[:2])
-            if speed_xy < 1e-3:
-                # Send it back towards +x with some speed
-                v_new = np.array([0.15, 0.0, 0.0], dtype=np.float32)
-            else:
-                # Simple "bounce": flip x-component, keep y, shrink a bit
-                v_new = np.array([-vx, vy, 0.0], dtype=np.float32) * 0.9
-
-            env.set_puck_velocity(v_new)
-
+            break
         # Don't break on block or done; we want continuous play
 
     print(f"\nSimulation finished. Total blocks: {num_blocks}")

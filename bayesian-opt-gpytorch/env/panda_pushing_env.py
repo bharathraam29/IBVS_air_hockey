@@ -45,6 +45,8 @@ class PandaPushingEnv(gym.Env):
         else:
             p.connect(p.DIRECT, options="--opengl2")
         p.setAdditionalSearchPath(pd.getDataPath())
+        p.setRealTimeSimulation(0)
+
 
         self.episode_step_counter = 0
         self.episode_counter = 0
@@ -677,8 +679,8 @@ class PandaHoverEnv(PandaPushingEnv):
                         camera_heigh=camera_heigh, camera_width=camera_width)
         
         self.space_limits = [
-            np.array([0.2, -0.3, 0.05]),   # [x_min, y_min, z_min]
-            np.array([0.8,  0.3, 0.4])     # [x_max, y_max, z_max]
+            np.array([0.2, -1, 0.05]),   # [x_min, y_min, z_min]
+            np.array([0.8,  1, 0.7])     # [x_max, y_max, z_max]
         ]
 
         # Target hover position (will be overwritten each step)
@@ -703,19 +705,19 @@ class PandaHoverEnv(PandaPushingEnv):
         self.delta_step_joint = 0.016
 
         # Small table centered at x=0.5, y=0.0, in front of robot
-        self.table_length = 0.6       # along x
-        self.table_width  = 0.4       # along y
+        self.table_length = 4.0
+        self.table_width = 1.0
         self.table_thickness = 0.05
-        self.wall_height = 0.1
-        self.wall_thickness = 0.02
+        self.wall_height = 0.3
+        self.wall_thickness = 0.05
 
         # Table transform
-        self.table_position = (0.5, 0.0, 0.0)  # center of table top
+        self.table_position = (self.table_length/2, 0, 0)  # center of table top
         self.table_orientation = (0, 0, 0, 1)  # no rotation
 
         # Puck parameters
         self.puck_radius = 0.06
-        self.puck_height = 0.02
+        self.puck_height = 0.1
         self.puck_mass = 0.17
 
         # Start puck near the right side of the table, slightly above top
@@ -807,7 +809,7 @@ class PandaHoverEnv(PandaPushingEnv):
             rgbaColor=[0.1, 0.1, 0.1, 1]
         )
 
-        for x_sign in [-1, 1]:
+        for x_sign in [ 1]:
             wx = px + x_sign * (L / 2)
             wy = py
             wz = pz + H / 2
@@ -890,9 +892,9 @@ class PandaHoverEnv(PandaPushingEnv):
         )
 
         # Launch puck with a modest speed towards -x
-        initial_speed = 0.15
+        initial_speed = 0.8
         vx = -initial_speed
-        vy = 0.02
+        vy = 0
         p.resetBaseVelocity(self.puck_id, linearVelocity=[vx, vy, 0.0])
 
     def reset(self):

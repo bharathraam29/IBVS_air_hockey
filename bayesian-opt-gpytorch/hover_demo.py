@@ -27,7 +27,7 @@ class TerminalColors:
     CYAN = '\033[96m'
 
 
-def hover_at_position(target_position, num_steps=50, render=True, device="cpu"):
+def hover_at_position(target_position, num_steps=5000, render=True, device="cpu"):
     """
     Make the robot arm hover at a specified target position.
     
@@ -47,11 +47,16 @@ def hover_at_position(target_position, num_steps=50, render=True, device="cpu"):
     print(f"Target position: [{target_position[0]:.3f}, {target_position[1]:.3f}, {target_position[2]:.3f}]")
     print(f"Number of steps: {num_steps}")
     print()
-    
+    success = False
     # Create environment
-    env = PandaHoverEnv(debug=render, render_non_push_motions=True, 
-                       render_every_n_steps=1, camera_heigh=800, camera_width=800)
-    
+    env = PandaHoverEnv(
+        debug=render,
+        render_non_push_motions=False,
+        render_every_n_steps=1,
+        camera_heigh=800,
+        camera_width=800
+    )
+
     # Set target position
     env.set_target_state(target_position)
     
@@ -64,20 +69,27 @@ def hover_at_position(target_position, num_steps=50, render=True, device="cpu"):
         env=env,
         model=dynamics_model,
         cost_function=hover_cost_function,
-        num_samples=500,  # Number of MPPI samples
+        num_samples=20,  # Number of MPPI samples
         horizon=10,       # Planning horizon
         device=device
     )
-    
-    # Initialize controller with default parameters
-    controller.set_target_state(target_position)
-    default_params = [0.01, 2.5, 2.5, 2.5]  # [lambda, sigma_x, sigma_y, sigma_z]
-    controller.set_parameters(default_params)
+    # import pdb; pdb.set_trace()
+
+
     
     # Reset environment
     state = env.reset()
     controller.reset()
-    
+    puck_position = env.get_puck_position() 
+    target_position[0] = 0.5
+    target_position[1] = puck_position[1]
+    target_position[2] = 0.02
+    controller.set_target_state(target_position)
+    controller.set_target_state(target_position)
+    default_params = [0.01, 2.5, 2.5, 2.5]  # [lambda, sigma_x, sigma_y, sigma_z]
+    controller.set_parameters(default_params)
+    env.set_target_state(target_position)
+    # Initialize controller with default parameters    
     initial_distance = np.linalg.norm(state - target_position)
     print(TerminalColors.OKGREEN + f"Initial end-effector position: [{state[0]:.3f}, {state[1]:.3f}, {state[2]:.3f}]" + TerminalColors.ENDC)
     print(TerminalColors.OKGREEN + f"Initial distance to target: {initial_distance:.4f} m" + TerminalColors.ENDC)
@@ -88,10 +100,27 @@ def hover_at_position(target_position, num_steps=50, render=True, device="cpu"):
     print("-" * 60)
     
     for step in range(num_steps):
+        puck_position = env.get_puck_position() 
+        print(abs(puck_position[1] - target_position[1]))
+        if abs(puck_position[1] - target_position[1]) > 0.1:
+            # state = env.reset()
+            controller.reset()
+            target_position[0] = 0.5
+            target_position[1] = puck_position[1]
+            target_position[2] = 0.02
+            controller.set_target_state(target_position)
+            controller.set_target_state(target_position)
+            default_params = [0.01, 2.5, 2.5, 2.5]  # [lambda, sigma_x, sigma_y, sigma_z]
+            controller.set_parameters(default_params)
+            env.set_target_state(target_position)
+            success = False
+
         # Get action from controller
         action = controller.control(state)
         
         # Execute action
+        if success:
+            action = np.array([0.0, 0.0, 0.0])
         state, reward, done, info = env.step(action)
         
         # Calculate distance to target
@@ -103,11 +132,18 @@ def hover_at_position(target_position, num_steps=50, render=True, device="cpu"):
                   f"Distance: {distance:.4f} m")
         
         # Check if goal reached
+        dist_xy = np.linalg.norm(state[:2] - puck_position[:2])
+        if dist_xy < 0.1:
+            success = True
+            print("Made contact with puck")
+            break
+
         if done:
             if distance < 0.05:  # 5cm tolerance
                 print(TerminalColors.BOLD + TerminalColors.GREEN + 
                       f"\n✓ Goal reached at step {step}!" + TerminalColors.ENDC)
-                break
+                success = True
+                # break
     
     print("-" * 60)
     
@@ -119,7 +155,7 @@ def hover_at_position(target_position, num_steps=50, render=True, device="cpu"):
     print(f"  Final position: [{state[0]:.3f}, {state[1]:.3f}, {state[2]:.3f}]")
     print(f"  Target position: [{target_position[0]:.3f}, {target_position[1]:.3f}, {target_position[2]:.3f}]")
     print(f"  Final distance: {final_distance:.4f} m")
-    
+    print(f"  puck position: [{puck_position[0]:.3f}, {puck_position[1]:.3f}, {puck_position[2]:.3f}]")
     if reached_goal:
         print(TerminalColors.BOLD + TerminalColors.GREEN + 
               f"  Status: ✓ Goal reached (within 5cm tolerance)" + TerminalColors.ENDC)
@@ -147,5 +183,5 @@ if __name__ == "__main__":
     print(TerminalColors.BOLD + "="*60 + TerminalColors.ENDC)
     
     target_pos_1 = np.array([0.5, 0.0, 0.02])  # [x, y, z] in meters
-    hover_at_position(target_pos_1, num_steps=50, render=RENDER, device=DEVICE)
+    hover_at_position(target_pos_1, render=RENDER, device=DEVICE)
 
