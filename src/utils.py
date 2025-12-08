@@ -11,6 +11,8 @@ import sympy as sp
 
 import imageio
 
+import casadi as ca
+
 #camera (don't change these settings)
 camera_width = 512                                             #image width
 camera_height = 512                                            #image height
@@ -167,3 +169,70 @@ def get_puck_center_from_camera(puck_id, segmentation_image):
     v = int(np.mean(ys))   # vertical   (row) - pixel value
 
     return (u, v)
+
+def record_camera(camTargetPos = [-0.36, 0.72, -0.33], camDistance = 3, camOrientation = [44.4, -51, 0]):
+    
+    # Camera setup
+
+    # CamOrientation - yaw, pitch, roll
+
+    width, height = 640, 480
+    camTargetPos = camTargetPos
+    camDistance = camDistance
+    yaw, pitch, roll = camOrientation
+
+
+    # Recording parameters 
+    duration = 10.0            # seconds
+    fps = 30                   # frames per second in GIF
+    sim_timestep = 1.0 / 240.0 # physics step
+    steps_per_frame = int(1.0 / (fps * sim_timestep))  # e.g., 8 steps per frame
+    total_frames = int(duration * fps)
+
+    # Get camera image for this frame
+    viewMatrix = p.computeViewMatrixFromYawPitchRoll(camTargetPos, camDistance, yaw, pitch, roll, 2)
+    projMatrix = p.computeProjectionMatrixFOV(60, width / height, 0.1, 100)
+    _, _, px, _, _ = p.getCameraImage(width, height, viewMatrix, projMatrix, renderer=p.ER_TINY_RENDERER)
+
+    # Extract RGB channels only
+    rgb = np.reshape(px, (height, width, 4))[:, :, :3]
+    rgb = rgb.astype(np.uint8) 
+    
+    return rgb
+
+
+
+def dh_transform(a, alpha, d, theta):
+    c = ca.cos(theta); s = ca.sin(theta)
+    ca_ = ca.cos(alpha); sa_ = ca.sin(alpha)
+
+    return ca.vertcat(
+        ca.hcat([c, -s*ca_,  s*sa_, a*c]),
+        ca.hcat([s,  c*ca_, -c*sa_, a*s]),
+        ca.hcat([0,     sa_,    ca_,   d]),
+        ca.hcat([0,       0,      0,   1])
+    )
+
+def ee_pose(q):
+    """
+    End Effector pose for franka panda robot
+    q can be numpy or CasADi vector.
+    Returns 4x4 transform.
+    """
+
+    DH = [
+        [0,        -np.pi/2, 0.333, q[0]],
+        [0,         np.pi/2, 0.000, q[1]],
+        [0,         np.pi/2, 0.316, q[2]],
+        [0.0825,   -np.pi/2, 0.000, q[3]],
+        [-0.0825,   np.pi/2, 0.384, q[4]],
+        [0,        -np.pi/2, 0.000, q[5]],
+        [0,         0.0,     0.088, q[6]],
+    ]
+
+    T = ca.SX.eye(4) if isinstance(q, ca.SX) or isinstance(q, ca.MX) else np.eye(4)
+
+    for a, alpha, d, theta in DH:
+        T = T @ dh_transform(a, alpha, d, theta)
+
+    return T

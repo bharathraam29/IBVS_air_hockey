@@ -115,15 +115,20 @@ def findJointControl(robot, delta_X, delta_Omega):
 
 
 
-def image_visual_servo(env, robot, close_depth = True):
+def image_visual_servo(env, robot, close_depth = True, record = True):
     success=False
-    frames = []
+
+    eye_in_hand_frames = []
+    env_frames = []
+
     for ITER in range(MAX_ITER):
         p.stepSimulation()
         ''' Match Camera Pose to Robot End-Effector and Get Image'''
         
-        cameraPosition, eeOrientation = robot.get_ee_position()
+        eePosition, eeOrientation = robot.get_ee_position()
+        
         cameraOrientation = eeOrientation 
+        cameraPosition = eePosition + np.array([0.01, 0.01, 0.01])
 
         rgb, depth, segment = utils.get_camera_img_float(cameraPosition, cameraOrientation)
         
@@ -188,65 +193,41 @@ def image_visual_servo(env, robot, close_depth = True):
         if object_loc:
             u, v = object_loc
 
-        cv2.circle(rgb, (int(camera_width/2), int(camera_height/2)), 5, (0, 255, 0), -1)
-        cv2.circle(rgb, (u,v), 5, (255, 0, 255), -1)
-        cv2.imshow("depth", depth)
-        cv2.imshow("rgb", rgb)
-        frames.append(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
-        cv2.waitKey(1)
+        if record:
+            cv2.circle(rgb, (int(camera_width/2), int(camera_height/2)), 5, (0, 255, 0), -1)
+            cv2.circle(rgb, (u,v), 5, (255, 0, 255), -1)
+            cv2.imshow("depth", depth)
+            cv2.imshow("rgb", rgb)
+            eye_in_hand_frames.append(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+            env_frames.append(utils.record_camera())
+            cv2.waitKey(1)
+
         #coordinate of the puck
         puck_position, puck_orientation = p.getBasePositionAndOrientation(env.puck_id)
         # print(puck_position)
 
-        if abs(z_error) < IS_CONTACT_TOL and puck_position[1] >= 0.3:
+        if abs(z_error) < IS_CONTACT_TOL and puck_position[1] >= env.finish_line:
             success=True
             break
-        if puck_position[1] < 0.3:
+
+        if puck_position[1] < env.finish_line:
             success=False
             break
-
-    # imageio.mimsave('robot_servoing_PD.gif', frames, fps=20)
-    # print("Gif saved")
+    
+    if record:
+        imageio.mimsave('robot_servoing_PD_6_3.gif', eye_in_hand_frames, fps=20)
+        imageio.mimsave('robot_servoing_PD_env_6_3.gif', env_frames, fps=20)
+        print("Gif saved")
 
     #close the physics server
     cv2.destroyAllWindows()    
     p.disconnect() 
+
     return success
-
-
-
-
 
 if __name__ == "__main__":
     from src.env_robot import Env, Robot
-    env = Env()
+    env = Env() #puck_velocity=[6.0, -3.5, 0.0]
     robot = Robot()
-    _ = image_visual_servo(env, robot)
-
-
-"""
-    #scenario 1:
-    velcities = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-    success_list = []
-    for velocity in velcities:
-        env = Env(puck_velocity=[0.0, velocity, 0.0])
-        robot = Robot()
-        
-        success = image_visual_servo(env, robot)
-        success_list.append(success)
-
-    print("Scenario 1: Success rate: ", np.mean(success_list))
-
-
-    #scenario 2:
-    velcities = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-    success_list = []
-    for velocity in velcities:
-        env = Env(puck_velocity=[velocity, 3.5, 0.0])
-        robot = Robot()
-        
-        success = image_visual_servo(env, robot)
-        success_list.append(success)
-
-    print("Scenario 2: Success rate: ", np.mean(success_list))
-"""
+    print(image_visual_servo(env, robot, record = True))
+    

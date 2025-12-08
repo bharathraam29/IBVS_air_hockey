@@ -7,7 +7,7 @@ import os
 
 class Env:
 
-    def __init__(self, puck_velocity = [3.0, 1.0, 0.0]):
+    def __init__(self, GUI = True, puck_velocity = [3.0, -1.0, 0.0]):
 
         # Table parameters
         self.table_length = 4.0
@@ -29,8 +29,12 @@ class Env:
         self.puck_base_pos = [0.0, self.table_length-self.wall_thickness*2, self.puck_height/2 + 0.01]
 
         # PYBULLET INIT
-    
-        p.connect(p.GUI)
+        if GUI:
+            p.connect(p.GUI)
+        else:
+            p.connect(p.DIRECT)
+
+        p.setTimeStep(1./240.)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -9.8)
         p.setRealTimeSimulation(0)
@@ -43,20 +47,22 @@ class Env:
         # Launch puck 
         p.resetBaseVelocity(self.puck_id, linearVelocity=puck_velocity)
 
-        line_y = 0.3 
+        self.finish_line = 0.3 
         line_color = [1, 0, 0] # Red color [R, G, B]
         line_width = 3.0 # Optional width
 
         # Define the start and end points for a line spanning the x-axis
-        lineFrom = [-1.0, line_y, 0.1]
-        lineTo = [1.0, line_y, 0.1]
+        lineFrom = [-1.0, self.finish_line, 0.1]
+        lineTo = [1.0, self.finish_line, 0.1]
 
         # Add the debug line to the PyBullet environment
         # This will return a unique ID (line_id) which can be used to remove or update the line later.
         line_id = p.addUserDebugLine(lineFrom, lineTo, lineColorRGB=line_color, lineWidth=line_width)
 
         # You can also add a label:
-        p.addUserDebugText("", [1.0, line_y, 0.1], textColorRGB=line_color)
+        p.addUserDebugText("", [1.0, self.finish_line, 0.1], textColorRGB=line_color)
+
+
         # Optional engine tuning
         p.setPhysicsEngineParameter(contactSlop=0.0)
         p.setPhysicsEngineParameter(numSolverIterations=200)
@@ -183,7 +189,7 @@ class Env:
 
 # Robot with Camera Class
 class Robot:
-    def __init__(self, robot_id = None, initialJointPos = [0,-np.pi/4,np.pi/4,-np.pi/4,np.pi/4,np.pi/4,np.pi/4,0,0,0,0,0]):
+    def __init__(self, robot_id = None, initialJointPos = [0,-np.pi/4,np.pi/4,-np.pi/4,np.pi/4,np.pi/2,np.pi/4,0,0,0,0,0]):
 
         self.robot_id = p.loadURDF(os.path.join(pybullet_data.getDataPath(), "franka_panda/panda.urdf"),useFixedBase=True)
         p.resetBasePositionAndOrientation(self.robot_id, [0, 0, 0], [0, 0, 0, 1])
