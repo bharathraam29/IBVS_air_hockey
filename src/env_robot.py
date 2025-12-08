@@ -7,7 +7,7 @@ import os
 
 class Env:
 
-    def __init__(self):
+    def __init__(self, puck_velocity = [3.0, 1.0, 0.0]):
 
         # Table parameters
         self.table_length = 4.0
@@ -41,8 +41,22 @@ class Env:
         self.puck_id = self.create_puck()
 
         # Launch puck 
-        p.resetBaseVelocity(self.puck_id, linearVelocity=[3.0, 1.0, 0.0])
+        p.resetBaseVelocity(self.puck_id, linearVelocity=puck_velocity)
 
+        line_y = 0.3 
+        line_color = [1, 0, 0] # Red color [R, G, B]
+        line_width = 3.0 # Optional width
+
+        # Define the start and end points for a line spanning the x-axis
+        lineFrom = [-1.0, line_y, 0.1]
+        lineTo = [1.0, line_y, 0.1]
+
+        # Add the debug line to the PyBullet environment
+        # This will return a unique ID (line_id) which can be used to remove or update the line later.
+        line_id = p.addUserDebugLine(lineFrom, lineTo, lineColorRGB=line_color, lineWidth=line_width)
+
+        # You can also add a label:
+        p.addUserDebugText("", [1.0, line_y, 0.1], textColorRGB=line_color)
         # Optional engine tuning
         p.setPhysicsEngineParameter(contactSlop=0.0)
         p.setPhysicsEngineParameter(numSolverIterations=200)
