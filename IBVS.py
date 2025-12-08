@@ -116,7 +116,7 @@ def findJointControl(robot, delta_X, delta_Omega):
 
 
 def image_visual_servo(env, robot, close_depth = True):
-
+    success=False
     frames = []
     for ITER in range(MAX_ITER):
         p.stepSimulation()
@@ -152,7 +152,7 @@ def image_visual_servo(env, robot, close_depth = True):
             contact_err_norm = np.linalg.norm(contact_err)
 
             if contact_err_norm > contact_err_max:
-                print(contact_err_norm)
+                # print(contact_err_norm)
                 contact_err = contact_err * (contact_err_max / contact_err_norm)
 
             delta_X = delta_X - contact_err  # To close the gap between puck and EE
@@ -194,16 +194,25 @@ def image_visual_servo(env, robot, close_depth = True):
         cv2.imshow("rgb", rgb)
         frames.append(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
         cv2.waitKey(1)
+        #coordinate of the puck
+        puck_position, puck_orientation = p.getBasePositionAndOrientation(env.puck_id)
+        # print(puck_position)
 
-        if abs(z_error) < IS_CONTACT_TOL:
+        if abs(z_error) < IS_CONTACT_TOL and puck_position[1] >= 0.3:
+            success=True
+            break
+        if puck_position[1] < 0.3:
+            success=False
             break
 
-    imageio.mimsave('robot_servoing_PD.gif', frames, fps=20)
-    print("Gif saved")
+    # imageio.mimsave('robot_servoing_PD.gif', frames, fps=20)
+    # print("Gif saved")
 
     #close the physics server
     cv2.destroyAllWindows()    
     p.disconnect() 
+    return success
+
 
 
 
@@ -212,5 +221,32 @@ if __name__ == "__main__":
     from src.env_robot import Env, Robot
     env = Env()
     robot = Robot()
-    
-    image_visual_servo(env, robot)
+    _ = image_visual_servo(env, robot)
+
+
+"""
+    #scenario 1:
+    velcities = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    success_list = []
+    for velocity in velcities:
+        env = Env(puck_velocity=[0.0, velocity, 0.0])
+        robot = Robot()
+        
+        success = image_visual_servo(env, robot)
+        success_list.append(success)
+
+    print("Scenario 1: Success rate: ", np.mean(success_list))
+
+
+    #scenario 2:
+    velcities = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    success_list = []
+    for velocity in velcities:
+        env = Env(puck_velocity=[velocity, 3.5, 0.0])
+        robot = Robot()
+        
+        success = image_visual_servo(env, robot)
+        success_list.append(success)
+
+    print("Scenario 2: Success rate: ", np.mean(success_list))
+"""
