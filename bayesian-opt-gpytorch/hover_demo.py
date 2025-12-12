@@ -8,7 +8,7 @@ import torch
 import numpy as np
 import time
 from env.panda_pushing_env import PandaHoverEnv
-from controller.pushing_controller import PushingController, hover_cost_function
+from controller.controller import PushingController, hover_cost_function
 from model.state_dynamics_models import HoverKinematicModel
 
 class TerminalColors:
@@ -41,13 +41,12 @@ def hover_at_position(target_position, num_steps=5000, render=True, device="cpu"
         final_state: final end-effector position
         reached_goal: whether the goal was reached
     """
-    print(TerminalColors.BOLD + TerminalColors.CYAN + "="*60 + TerminalColors.ENDC)
-    print(TerminalColors.BOLD + "Hover Demo: Moving arm to target position" + TerminalColors.ENDC)
-    print(TerminalColors.BOLD + TerminalColors.CYAN + "="*60 + TerminalColors.ENDC)
+
     print(f"Target position: [{target_position[0]:.3f}, {target_position[1]:.3f}, {target_position[2]:.3f}]")
     print(f"Number of steps: {num_steps}")
     print()
     success = False
+    hover_success = False
     # Create environment
     env = PandaHoverEnv(
         debug=render,
@@ -113,13 +112,13 @@ def hover_at_position(target_position, num_steps=5000, render=True, device="cpu"
             default_params = [0.01, 2.5, 2.5, 2.5]  # [lambda, sigma_x, sigma_y, sigma_z]
             controller.set_parameters(default_params)
             env.set_target_state(target_position)
-            success = False
+            hover_success = False
 
         # Get action from controller
         action = controller.control(state)
         
         # Execute action
-        if success:
+        if hover_success:
             action = np.array([0.0, 0.0, 0.0])
         state, reward, done, info = env.step(action)
         
@@ -135,15 +134,18 @@ def hover_at_position(target_position, num_steps=5000, render=True, device="cpu"
         dist_xy = np.linalg.norm(state[:2] - puck_position[:2])
         if dist_xy < 0.1:
             success = True
-            print("Made contact with puck")
+            print("Made contact with puck ==> Success")
             break
 
         if done:
             if distance < 0.05:  # 5cm tolerance
-                print(TerminalColors.BOLD + TerminalColors.GREEN + 
-                      f"\n✓ Goal reached at step {step}!" + TerminalColors.ENDC)
-                success = True
+                hover_success = True
                 # break
+        if puck_position[0] <0.2:
+            success = False
+            print("Puck in goal zone => Failed")
+            break
+        
     
     print("-" * 60)
     
@@ -156,12 +158,7 @@ def hover_at_position(target_position, num_steps=5000, render=True, device="cpu"
     print(f"  Target position: [{target_position[0]:.3f}, {target_position[1]:.3f}, {target_position[2]:.3f}]")
     print(f"  Final distance: {final_distance:.4f} m")
     print(f"  puck position: [{puck_position[0]:.3f}, {puck_position[1]:.3f}, {puck_position[2]:.3f}]")
-    if reached_goal:
-        print(TerminalColors.BOLD + TerminalColors.GREEN + 
-              f"  Status: ✓ Goal reached (within 5cm tolerance)" + TerminalColors.ENDC)
-    else:
-        print(TerminalColors.BOLD + TerminalColors.YELLOW + 
-              f"  Status: Goal not reached (tolerance: 5cm)" + TerminalColors.ENDC)
+
     
     # Cleanup
     if render:
@@ -179,7 +176,6 @@ if __name__ == "__main__":
     
     # Example 1: Hover at a specific position
     print(TerminalColors.BOLD + "\n" + "="*60 + TerminalColors.ENDC)
-    print(TerminalColors.BOLD + "Example 1: Hover at fixed position" + TerminalColors.ENDC)
     print(TerminalColors.BOLD + "="*60 + TerminalColors.ENDC)
     
     target_pos_1 = np.array([0.5, 0.0, 0.02])  # [x, y, z] in meters

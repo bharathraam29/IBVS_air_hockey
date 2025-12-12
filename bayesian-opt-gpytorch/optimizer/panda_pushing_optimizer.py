@@ -8,7 +8,7 @@ from bayes_opt import BayesianOptimization as BayesOpt
 from bayes_opt.util import UtilityFunction
 from cma import CMAEvolutionStrategy
 
-from controller.pushing_controller import PushingController, obstacle_avoidance_pushing_cost_function, free_pushing_cost_function, hover_cost_function
+from controller.controller import PushingController, obstacle_avoidance_pushing_cost_function, free_pushing_cost_function, hover_cost_function
 from env.panda_pushing_env import BOX_SIZE, PandaBoxPushingEnv, PandaHoverEnv
 from optimizer.bayesian_optimization import BayesianOptimization
 from model.state_dynamics_models import ResidualDynamicsModel, HoverKinematicModel
